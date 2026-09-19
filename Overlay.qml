@@ -360,6 +360,13 @@ Item {
       color: root.scrim
     }
 
+    Canvas {
+      id: rings
+      anchors.fill: parent
+      renderStrategy: Canvas.Cooperative
+      onPaint: root.paintRings(rings)
+    }
+
     MouseArea {
       anchors.fill: parent
       onClicked: root.dismiss()
@@ -413,13 +420,6 @@ Item {
       }
     }
 
-    Canvas {
-      id: rings
-      anchors.fill: parent
-      renderStrategy: Canvas.Cooperative
-      onPaint: root.paintRings(rings)
-    }
-
     Item {
       id: stage
       anchors.fill: parent
@@ -459,8 +459,8 @@ Item {
           foreground: root.foreground
           glass: root.background
           discSize: root.tileSize
-          x: stage.width / 2 + placed.nx * Math.min(stage.width, stage.height) * 0.92 - width / 2
-          y: stage.height / 2 + placed.ny * Math.min(stage.width, stage.height) * 0.92 - root.tileSize / 2
+          x: stage.width / 2 + placed.nx * Math.min(stage.width, stage.height) * 0.82 - width / 2
+          y: stage.height / 2 + placed.ny * Math.min(stage.height * 0.92, stage.width) * 0.82 - root.tileSize / 2
           z: selected ? 20 : 10
           onHovered: root.selectIndex(index)
           onActivated: root.activateIndex(index)
@@ -543,6 +543,7 @@ Item {
       anchors.bottom: parent.bottom
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottomMargin: Style.space(28)
+      z: 30
       text: "ESC close   ·   ENTER launch   ·   ← → orbit   ·   TAB sector"
       color: root.foreground
       opacity: 0.48

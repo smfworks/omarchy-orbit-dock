@@ -87,8 +87,8 @@ const search = Orbit.layoutTiles(catalog, "demo", 0.4);
 assert.ok(search.length >= 1);
 assert.ok(search.every(function(row) { return row.ring === "search"; }));
 
-const demoTheme = Orbit.demoThemes()[0];
-assert.strictEqual(Orbit.launchSpec(demoTheme).kind, "demo");
+const themeGlyphs = Orbit.demoThemes().map(function(it) { return it.glyph; });
+assert.strictEqual(new Set(themeGlyphs).size, themeGlyphs.length, "demo themes use distinct glyphs");
 
 assert.ok(!src.includes("pgrep"));
 

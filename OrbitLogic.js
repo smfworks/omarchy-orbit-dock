@@ -23,14 +23,14 @@ function demoApps() {
 
 function demoThemes() {
   return [
-    themeItem("osaka-jade", "Osaka Jade"),
-    themeItem("tokyo-night", "Tokyo Night"),
-    themeItem("catppuccin", "Catppuccin"),
-    themeItem("nord", "Nord"),
-    themeItem("gruvbox", "Gruvbox"),
-    themeItem("everforest", "Everforest"),
-    themeItem("kanagawa", "Kanagawa"),
-    themeItem("ristretto", "Ristretto")
+    themeItem("osaka-jade", "Osaka Jade", "󰌪"),
+    themeItem("tokyo-night", "Tokyo Night", "󰖔"),
+    themeItem("catppuccin", "Catppuccin", "󰄛"),
+    themeItem("nord", "Nord", "󰼶"),
+    themeItem("gruvbox", "Gruvbox", "󰔶"),
+    themeItem("everforest", "Everforest", "󰌁"),
+    themeItem("kanagawa", "Kanagawa", "󰓆"),
+    themeItem("ristretto", "Ristretto", "󰅶")
   ].map(markDemo)
 }
 
@@ -58,8 +58,8 @@ function item(id, name, sector, action, glyph, icon) {
   }
 }
 
-function themeItem(slug, name) {
-  var it = item("theme:" + slug, name, "themes", "set-theme", "󰃟", "")
+function themeItem(slug, name, glyph) {
+  var it = item("theme:" + slug, name, "themes", "set-theme", glyph || "󰃟", "")
   it.slug = String(slug || "")
   return it
 }

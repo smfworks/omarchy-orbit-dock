@@ -14,14 +14,23 @@ Item {
   property var pluginRegistry: null
 
   property bool opened: false
+  property bool forceDemo: false
   property string filterText: ""
+  property string actionHint: ""
+  property string launchError: ""
   property int selectedIndex: 0
   property string activeSector: "apps"
   property real orbitPhase: 0
   property var catalog: []
-  property bool appsLive: false
-  property bool themesLive: false
-  property bool agentsLive: false
+  property var liveApps: []
+  property var liveThemes: []
+  property var liveAgents: []
+  property string appsError: ""
+  property string themesError: ""
+  property string agentsError: ""
+  property bool appsProbed: false
+  property bool themesProbed: false
+  property bool agentsProbed: false
   property bool hermesHome: false
   property bool hermesBin: false
 
@@ -33,13 +42,32 @@ Item {
   property string fontFamily: Style.font.menuFamily || Style.font.family
   readonly property int tileSize: Style.space(72)
   readonly property string pluginId: (root.manifest && root.manifest.id) || "smf.orbit-dock"
+  readonly property string appsMode: Orbit.sectorMode(root.liveApps, root.appsError, root.appsProbed, root.forceDemo)
+  readonly property string themesMode: Orbit.sectorMode(root.liveThemes, root.themesError, root.themesProbed, root.forceDemo)
+  readonly property string agentsMode: Orbit.sectorMode(root.liveAgents, root.agentsError, root.agentsProbed, root.forceDemo)
+  readonly property bool appsLive: root.appsMode === "live" || root.appsMode === "stale"
+  readonly property bool themesLive: root.themesMode === "live" || root.themesMode === "stale"
+  readonly property bool agentsLive: root.agentsMode === "live" || root.agentsMode === "stale"
+
+  function catalogFlags() {
+    return {
+      appsError: root.appsError,
+      themesError: root.themesError,
+      agentsError: root.agentsError,
+      appsProbed: root.appsProbed,
+      themesProbed: root.themesProbed,
+      agentsProbed: root.agentsProbed,
+      forceDemo: root.forceDemo
+    }
+  }
 
   function open(payloadJson) {
-    var payload = ({})
-    try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) { payload = ({}) }
-    root.filterText = payload.filter !== undefined ? String(payload.filter) : ""
-    if (payload.sector && Orbit.SECTORS.indexOf(String(payload.sector)) !== -1)
-      root.activeSector = String(payload.sector)
+    var payload = Orbit.parsePayload(payloadJson)
+    root.filterText = payload.filter
+    if (payload.sector) root.activeSector = payload.sector
+    root.forceDemo = payload.forceDemo === true
+    root.actionHint = ""
+    root.launchError = ""
     root.opened = true
     root.refreshCatalog()
     root.rebuildDisplay()
@@ -65,26 +93,52 @@ Item {
     var ids = []
     try {
       var plugins = root.pluginRegistry && root.pluginRegistry.installedPlugins
-      if (!plugins) return ids
+      if (!plugins) {
+        if (root.agentsError === "plugin registry failed") root.agentsError = ""
+        return ids
+      }
       for (var key in plugins) ids.push(String(key))
-    } catch (e) {}
+      if (root.agentsError === "plugin registry failed") root.agentsError = ""
+    } catch (e) {
+      root.agentsError = "plugin registry failed"
+    }
     return ids
   }
 
   function collectApps() {
-    var values = []
+    var primary = []
+    var fallback = []
+    var primaryTried = false
+    var fallbackTried = false
+    var primaryFailed = false
+    var fallbackFailed = false
     try {
-      if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.sortedEntries === "function")
-        values = root.shell.appLibrary.sortedEntries("") || []
-    } catch (e1) { values = [] }
-    if (!values || values.length === 0) {
-      try {
-        values = (DesktopEntries.applications && DesktopEntries.applications.values) || []
-      } catch (e2) { values = [] }
+      if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.sortedEntries === "function") {
+        primaryTried = true
+        primary = root.shell.appLibrary.sortedEntries("") || []
+      }
+    } catch (e1) {
+      primaryTried = true
+      primaryFailed = true
+      primary = []
     }
-    var apps = Orbit.collectDesktopApps(values)
-    root.appsLive = apps.length > 0
-    return apps
+    try {
+      fallbackTried = true
+      fallback = (DesktopEntries.applications && DesktopEntries.applications.values) || []
+    } catch (e2) {
+      fallbackTried = true
+      fallbackFailed = true
+      fallback = []
+    }
+    var result = Orbit.appDiscovery(primary, fallback, primaryFailed, fallbackFailed)
+    var attempts = (primaryTried ? 1 : 0) + (fallbackTried ? 1 : 0)
+    var failures = (primaryTried && primaryFailed ? 1 : 0) + (fallbackTried && fallbackFailed ? 1 : 0)
+    root.liveApps = result.items
+    root.appsProbed = true
+    root.appsError = (attempts > 0 && failures === attempts && result.items.length === 0)
+      ? "desktop catalog failed"
+      : ""
+    return root.liveApps
   }
 
   function collectAgents() {
@@ -92,29 +146,41 @@ Item {
       hermesHome: root.hermesHome,
       hermesBin: root.hermesBin
     })
-    root.agentsLive = agents.length > 0
+    root.liveAgents = agents
+    root.agentsProbed = true
     return agents
   }
 
-  function refreshCatalog() {
-    var apps = root.collectApps()
-    var themes = root.themesLive ? Orbit.itemsForSector(root.catalog, "themes") : []
-    if (!root.themesLive) themes = []
-    var agents = root.collectAgents()
-    root.catalog = Orbit.mergeCatalog(apps, themes, agents)
-    if (!themeListProc.running) themeListProc.running = true
-    if (!hermesBinProc.running) hermesBinProc.running = true
+  function rebuildCatalog() {
+    root.catalog = Orbit.mergeCatalog(root.liveApps, root.liveThemes, root.liveAgents, root.catalogFlags())
+    root.rebuildDisplay()
   }
 
-  function applyThemeList(raw) {
-    var themes = Orbit.parseThemeList(raw)
-    root.themesLive = themes.length > 0
-    var apps = Orbit.itemsForSector(root.catalog, "apps")
-    var agents = Orbit.itemsForSector(root.catalog, "agents")
-    if (!root.appsLive) apps = []
-    if (!root.agentsLive) agents = []
-    root.catalog = Orbit.mergeCatalog(apps, themes, agents)
-    root.rebuildDisplay()
+  function kickProbe(proc) {
+    if (!proc) return
+    if (proc.running) proc.running = false
+    proc.running = true
+  }
+
+  function refreshCatalog() {
+    root.collectApps()
+    root.collectAgents()
+    root.rebuildCatalog()
+    root.kickProbe(themeListProc)
+    root.kickProbe(hermesBinProc)
+  }
+
+  function applyThemeDiscovery() {
+    var result = Orbit.themeDiscovery(themeListProc.lastText, themeListProc.lastCode)
+    if (result.error && root.liveThemes.length > 0) {
+      root.themesError = result.error
+      root.themesProbed = true
+    } else {
+      root.liveThemes = result.items
+      root.themesError = result.error
+      root.themesProbed = result.probed
+    }
+    root.rebuildCatalog()
   }
 
   function displayRows() {
@@ -141,6 +207,7 @@ Item {
         itemPluginId: row.pluginId,
         itemPresence: row.presence,
         itemSource: row.source,
+        itemChip: Orbit.presenceLabel(row),
         itemRing: row.ring,
         itemIndex: row.index,
         itemCount: row.count,
@@ -179,33 +246,42 @@ Item {
     }
   }
 
+  function clearHint() {
+    root.actionHint = ""
+  }
+
   function setFilter(nextFilter) {
     root.filterText = nextFilter
     root.selectedIndex = 0
+    root.clearHint()
     root.rebuildDisplay()
   }
 
   function selectDelta(delta) {
     if (displayModel.count === 0) return
+    root.clearHint()
     root.selectedIndex = Orbit.wrapIndex(root.selectedIndex, displayModel.count, delta)
     var row = root.selectedRow()
     if (row) root.activeSector = row.itemSector
   }
 
   function selectSector(delta) {
+    root.clearHint()
     if (root.filterText) {
       root.selectDelta(delta)
       return
     }
-    root.activeSector = Orbit.nextSector(root.activeSector, delta)
     var rows = root.displayRows()
-    root.selectedIndex = Orbit.firstIndexForSector(rows, root.activeSector)
+    root.activeSector = Orbit.nextOccupiedSector(rows, root.activeSector, delta)
+    var idx = Orbit.firstIndexForSector(rows, root.activeSector)
+    if (idx >= 0) root.selectedIndex = idx
     var row = root.selectedRow()
     if (row) root.activeSector = row.itemSector
   }
 
   function selectIndex(index) {
     if (index < 0 || index >= displayModel.count) return
+    root.clearHint()
     root.selectedIndex = index
     var row = root.selectedRow()
     if (row) root.activeSector = row.itemSector
@@ -227,24 +303,54 @@ Item {
   }
 
   function runArgv(argv) {
-    if (!argv || argv.length === 0) return
+    if (!argv || argv.length === 0) return false
     try {
       Quickshell.execDetached(argv)
+      return true
     } catch (e) {
       try {
-        if (typeof Util !== "undefined" && Util.execDetached)
+        if (typeof Util !== "undefined" && Util.execDetached) {
           Util.execDetached(argv.join(" "))
+          return true
+        }
       } catch (e2) {}
     }
+    return false
   }
 
   function activateIndex(index) {
     if (index < 0 || index >= displayModel.count) return
     var entry = root.rowToEntry(displayModel.get(index))
     var spec = Orbit.launchSpec(entry)
-    root.dismiss()
-    if (spec.kind === "demo" || spec.kind === "noop") return
-    root.runArgv(spec.argv)
+    if (!Orbit.shouldDismissOnLaunch(spec)) {
+      root.actionHint = Orbit.launchHint(entry)
+      return
+    }
+    var ok = root.runArgv(spec.argv)
+    if (ok) {
+      root.actionHint = ""
+      root.launchError = ""
+      root.dismiss()
+      return
+    }
+    root.launchError = "launch failed"
+    root.actionHint = "launch failed · " + ((entry && entry.name) || spec.kind)
+  }
+
+  function emptyCaption() {
+    if (root.filterText) return "No matches"
+    return "EMPTY catalog · nothing to orbit"
+  }
+
+  function coreCaption() {
+    if (root.actionHint) return root.actionHint
+    var row = root.selectedRow()
+    if (!row) return displayModel.count === 0 ? root.emptyCaption() : ""
+    return Orbit.statusLine({
+      apps: root.appsMode,
+      themes: root.themesMode,
+      agents: root.agentsMode
+    }, root.rowToEntry(row), "")
   }
 
   function paintRings(canvas) {
@@ -295,6 +401,13 @@ Item {
       + a + ")"
   }
 
+  function chipFill(mode) {
+    if (mode === "live") return 0.28
+    if (mode === "err") return 0.24
+    if (mode === "stale") return 0.20
+    return 0.16
+  }
+
   ListModel { id: displayModel }
 
   FileView {
@@ -304,10 +417,15 @@ Item {
       root.hermesHome = true
       if (root.opened) {
         root.refreshCatalog()
-        root.rebuildDisplay()
       }
     }
-    onLoadFailed: root.hermesHome = false
+    onLoadFailed: {
+      root.hermesHome = false
+      if (root.opened && root.agentsProbed) {
+        root.collectAgents()
+        root.rebuildCatalog()
+      }
+    }
   }
 
   Process {
@@ -316,24 +434,27 @@ Item {
     onExited: {
       root.hermesBin = hermesBinProc.exitCode === 0
       if (root.opened) {
-        root.refreshCatalog()
-        root.rebuildDisplay()
+        root.collectAgents()
+        root.rebuildCatalog()
       }
     }
   }
 
   Process {
     id: themeListProc
-    command: ["bash", "-c",
-      "if command -v omarchy-theme-list >/dev/null; then omarchy-theme-list; "
-      + "else "
-      + "find \"$HOME/.config/omarchy/themes\" \"" + (root.omarchyPath || "/usr/share/omarchy") + "/themes\" "
-      + "-mindepth 1 -maxdepth 1 \\( -type d -o -type l \\) -printf '%f\\n' 2>/dev/null "
-      + "| sort -u | sed -E 's/(^|-)([a-z])/\\1\\u\\2/g; s/-/ /g'; fi"
-    ]
+    property string lastText: ""
+    property int lastCode: 0
+    command: Orbit.themeListCommand(root.omarchyPath)
     stdout: StdioCollector {
+      id: themeStdout
       waitForEnd: true
-      onStreamFinished: root.applyThemeList(String(text || ""))
+      onStreamFinished: themeListProc.lastText = String(text || "")
+    }
+    onExited: {
+      themeListProc.lastCode = themeListProc.exitCode
+      if (themeStdout && themeStdout.text)
+        themeListProc.lastText = String(themeStdout.text || "")
+      root.applyThemeDiscovery()
     }
   }
 
@@ -433,7 +554,7 @@ Item {
           required property string itemSector
           required property string itemGlyph
           required property string itemIcon
-          required property string itemPresence
+          required property string itemChip
           required property string itemRing
           required property int itemIndex
           required property int itemCount
@@ -454,7 +575,7 @@ Item {
           glyph: itemGlyph
           iconSource: root.iconFor({ itemIcon: itemIcon })
           sector: itemSector
-          presence: Orbit.presenceLabel({ presence: itemPresence })
+          presence: itemChip
           accent: root.accent
           foreground: root.foreground
           glass: root.background
@@ -464,6 +585,83 @@ Item {
           z: selected ? 20 : 10
           onHovered: root.selectIndex(index)
           onActivated: root.activateIndex(index)
+        }
+      }
+    }
+
+    Rectangle {
+      id: honesty
+      anchors.top: parent.top
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.topMargin: Style.space(22)
+      width: honestyRow.implicitWidth + Style.space(28)
+      height: Style.space(36)
+      radius: height / 2
+      color: Util.alpha(root.background, 0.78)
+      border.width: 1
+      border.color: Util.alpha(root.accent, 0.55)
+      z: 30
+
+      Row {
+        id: honestyRow
+        anchors.centerIn: parent
+        spacing: Style.space(8)
+
+        Rectangle {
+          width: appsChip.implicitWidth + Style.space(14)
+          height: Style.space(20)
+          radius: height / 2
+          color: Util.alpha(root.accent, root.chipFill(root.appsMode))
+          border.width: 1
+          border.color: Util.alpha(root.accent, 0.7)
+          Text {
+            id: appsChip
+            anchors.centerIn: parent
+            text: "APPS " + Orbit.sectorLabel(root.appsMode)
+            color: root.accent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.1
+          }
+        }
+
+        Rectangle {
+          width: themesChip.implicitWidth + Style.space(14)
+          height: Style.space(20)
+          radius: height / 2
+          color: Util.alpha(root.accent, root.chipFill(root.themesMode))
+          border.width: 1
+          border.color: Util.alpha(root.accent, 0.7)
+          Text {
+            id: themesChip
+            anchors.centerIn: parent
+            text: "THEMES " + Orbit.sectorLabel(root.themesMode)
+            color: root.accent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.1
+          }
+        }
+
+        Rectangle {
+          width: agentsChip.implicitWidth + Style.space(14)
+          height: Style.space(20)
+          radius: height / 2
+          color: Util.alpha(root.accent, root.chipFill(root.agentsMode))
+          border.width: 1
+          border.color: Util.alpha(root.accent, 0.7)
+          Text {
+            id: agentsChip
+            anchors.centerIn: parent
+            text: "AGENTS " + Orbit.sectorLabel(root.agentsMode)
+            color: root.accent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.1
+          }
         }
       }
     }
@@ -513,12 +711,7 @@ Item {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: {
-            var row = root.selectedRow()
-            if (!row) return displayModel.count === 0 ? "No matches" : ""
-            var sector = String(row.itemSector || "").toUpperCase()
-            return sector + "  ·  " + row.itemName
-          }
+          text: root.coreCaption()
           color: root.accent
           opacity: 0.9
           font.family: root.fontFamily
@@ -529,9 +722,10 @@ Item {
 
         Text {
           width: parent.width
-          text: Orbit.catalogHint(root.appsLive, root.themesLive, root.agentsLive)
+          textFormat: Text.PlainText
+          text: Orbit.catalogHint(root.appsMode, root.themesMode, root.agentsMode)
           color: root.foreground
-          opacity: 0.45
+          opacity: 0.62
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           horizontalAlignment: Text.AlignHCenter
@@ -544,14 +738,14 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottomMargin: Style.space(28)
       z: 30
-      text: "ESC close   ·   ENTER launch   ·   ← → orbit   ·   TAB sector"
+      textFormat: Text.PlainText
+      text: Orbit.footerHint(root.filterText, root.rowToEntry(root.selectedRow()))
       color: root.foreground
       opacity: 0.48
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.letterSpacing: 1.1
     }
-
   }
 
   Timer {

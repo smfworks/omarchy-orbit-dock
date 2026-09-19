@@ -19,7 +19,7 @@ Item {
   signal hovered()
 
   width: discSize
-  height: discSize + Style.space(28)
+  height: discSize + Style.space(40)
 
   property real pulse: selected ? 1 : 0.28
 
@@ -105,12 +105,12 @@ Item {
   }
 
   Text {
-    visible: tile.presence.length > 0 && tile.selected
+    visible: tile.presence.length > 0
     anchors.top: label.bottom
     anchors.horizontalCenter: parent.horizontalCenter
     text: tile.presence
     color: tile.accent
-    opacity: 0.8
+    opacity: tile.selected ? 0.9 : 0.72
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
     font.letterSpacing: 1.1

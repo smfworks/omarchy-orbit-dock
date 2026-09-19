@@ -8,6 +8,11 @@ Plugin id: `smf.orbit-dock`. Overlay kind, not a bar widget. From
 [SMF Works](https://github.com/smfworks); destined for mikesai6 Omarchy
 installs when that bundle is used.
 
+Adversarial review of whether the HUD is screenshot-trustworthy:
+[docs/OPPOSITION.md](docs/OPPOSITION.md). Honesty patterns match
+[Neural Pulse](https://github.com/smfworks/omarchy-neural-pulse) and
+[Ghost Trace](https://github.com/smfworks/omarchy-ghost-trace).
+
 ## Install
 
 ```sh
@@ -34,33 +39,75 @@ Bind it like Super+Space if you want a HUD instead of the stock launcher:
 bind = SUPER, O, exec, omarchy-shell shell toggle smf.orbit-dock '{}'
 ```
 
+Force the labeled DEMO rings even on a live desktop (screenshot harness):
+
+```sh
+omarchy-shell shell summon smf.orbit-dock '{"demo":true}'
+```
+
 ## Usage
 
 - Type to filter the orbit
 - `←` `→` move around the current ring
-- `Tab` / `↑` `↓` jump Apps · Themes · Agents
-- `Enter` launches the selection
-- `Escape` clears the filter, then closes
+- `Tab` / `↑` `↓` jump Apps · Themes · Agents (skips an empty sector)
+- `Enter` launches a **LIVE** selection; a **DEMO** disc stays open and says
+  it cannot launch
+- `Escape` clears the filter first, then closes — the footer says which step
 - Click the dimmed backdrop to dismiss
 
 Idle tiles drift on a slow orbit. The selected disc pulses a neon glow.
 
+## DEMO vs LIVE
+
+The honesty bar is labeled so a screenshot is self-describing — same contract
+as Ghost Trace and Neural Pulse. Each sector (apps, themes, agents) carries
+its own chip:
+
+- **LIVE** — that sector was discovered from the desktop / Omarchy / an
+  installed plugin
+- **DEMO** — not probed yet, or `{"demo":true}`. A curated ring still fills
+  the HUD so it is not blank; every disc says **DEMO** and Enter will not
+  launch
+- **EMPTY** — discovery succeeded and found nothing. The ring stays empty.
+  Orbit Dock does not invent Terminal / Tokyo Night / Hermes to hide a
+  vacant catalog
+- **ERR** — app or theme discovery failed (both desktop sources threw, or
+  `omarchy-theme-list` / `find` exited non-zero with no parseable names).
+  A labeled DEMO fill is shown instead of a silent fake launcher
+- **STALE** — a later probe failed after a live catalog was already shown.
+  The last live discs remain; the chip says STALE, not LIVE
+
+### Agents
+
+Hermes / [Neural Pulse](https://github.com/smfworks/omarchy-neural-pulse)
+/ [Cron Constellation](https://github.com/smfworks/omarchy-cron-constellation)
+appear only when those plugins or a Hermes home/binary are actually present.
+
+| Evidence | Chip |
+| --- | --- |
+| Plugin id installed (`smf.hermes`, `smf.neural-pulse`, `smf.cron-constellation`) | **INSTALLED** |
+| `~/.hermes/state.db` readable or `hermes` on `PATH`, no plugin | **DETECTED** |
+| Force-demo / unprobed fallback | **DEMO** |
+
+Orbit Dock **never invents agent live status**. There is no LIVE / BUSY /
+ONLINE / RUNNING badge on an agent disc. Presence is not a Hermes session
+probe — that is Neural Pulse’s job.
+
 ## Data
 
 - **Apps** — Quickshell `DesktopEntries` / Omarchy `appLibrary` when the shell
-  exposes them; otherwise a curated demo ring so the HUD still looks complete
+  exposes them. Empty list → EMPTY. Both sources throwing → ERR + DEMO fill
 - **Themes** — `omarchy-theme-list` (or theme directories under
-  `$OMARCHY_PATH/themes` and `~/.config/omarchy/themes`); otherwise demo names
-- **Agents** — Hermes / [Neural Pulse](https://github.com/smfworks/omarchy-neural-pulse)
-  / [Cron Constellation](https://github.com/smfworks/omarchy-cron-constellation)
-  only when those plugins or a Hermes home/binary are actually present.
-  Presence is `INSTALLED` / `DETECTED` / `DEMO`. Orbit Dock never invents live
-  session status.
+  `$OMARCHY_PATH/themes` and `~/.config/omarchy/themes`). Empty list → EMPTY.
+  Non-zero exit with no names → ERR + DEMO fill
+- **Agents** — as above. Missing plugins and no Hermes home/binary → EMPTY
 
-Launch uses the same helpers Omarchy already trusts: `uwsm-app -- gtk-launch`
-for desktop entries (AppLibrary spirit / `smf.hermes` `bar.run`),
-`omarchy-theme-set` for themes, `uwsm-app -- hermes` for Hermes, and
-`omarchy-shell shell summon` for sibling SMF plugins.
+Launch uses the same helpers Omarchy already trusts, and only after the
+entry is live: `uwsm-app -- gtk-launch` for desktop entries (AppLibrary
+spirit / `smf.hermes` `bar.run`), `omarchy-theme-set` for themes,
+`uwsm-app -- hermes` for Hermes, and `omarchy-shell shell summon` for
+sibling SMF plugins. A failed `execDetached` keeps the HUD open and says
+**launch failed**.
 
 ## Contract
 
@@ -73,7 +120,7 @@ for desktop entries (AppLibrary spirit / `smf.hermes` `bar.run`),
 Optional payload:
 
 ```json
-{ "filter": "term", "sector": "themes" }
+{ "filter": "term", "sector": "themes", "demo": true }
 ```
 
 ```sh

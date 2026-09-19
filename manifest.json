@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "smf.orbit-dock",
+  "name": "Orbit Dock",
+  "version": "0.1.0",
+  "author": "SMF Works",
+  "license": "MIT",
+  "description": "Fullscreen sci-fi radial HUD launcher: orbiting apps, themes, and agents. A Super+Space-style alternative that looks like a starship command overlay.",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Overlay.qml"
+  }
+}

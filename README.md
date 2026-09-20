@@ -13,6 +13,12 @@ Adversarial review of whether the HUD is screenshot-trustworthy:
 [Neural Pulse](https://github.com/smfworks/omarchy-neural-pulse) and
 [Ghost Trace](https://github.com/smfworks/omarchy-ghost-trace).
 
+## Demo
+
+Orbit Dock on Omarchy (mikesai6) — fullscreen radial HUD launcher (apps / themes / agents).
+
+https://github.com/smfworks/omarchy-orbit-dock/releases/download/demo/demo.mp4
+
 ## Install
 
 ```sh
